@@ -18,7 +18,22 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) =>
     setLineNumbers(Array.from({ length: lines.length }, (_, i) => i + 1));
   }, [value]);
 
-  // 应用魔法高亮
+  // 安全的文本转义函数
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
+  // 安全地创建高亮元素
+  const createHighlightElement = (text: string, className: string): HTMLSpanElement => {
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = text; // 使用 textContent 而不是 innerHTML
+    return span;
+  };
+
+  // 应用魔法高亮 - 使用安全的DOM操作
   const applyMagicHighlighting = (text: string) => {
     const highlights = language === 'zh' ? {
       '那么普通却那么自信': 'herlang-rainbow',
@@ -32,29 +47,72 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) =>
       'give up': 'herlang-shake',
     };
 
-    let highlightedText = text;
+    if (!highlightRef.current) return;
+
+    // 清空容器
+    highlightRef.current.innerHTML = '';
     
-    // 转义HTML字符
-    highlightedText = highlightedText
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    const lines = text.split('\n');
+    
+    lines.forEach((line, lineIndex) => {
+      const lineDiv = document.createElement('div');
+      let remainingText = line;
+      let lastIndex = 0;
 
-    // 应用关键词高亮
-    Object.entries(highlights).forEach(([keyword, className]) => {
-      const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g');
-      highlightedText = highlightedText.replace(
-        regex, 
-        `<span class="${className}">$1</span>`
-      );
+      // 查找并处理关键词
+      Object.entries(highlights).forEach(([keyword, className]) => {
+        const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g');
+        let match;
+        const matches: Array<{index: number, length: number, keyword: string, className: string}> = [];
+        
+        while ((match = regex.exec(remainingText)) !== null) {
+          matches.push({
+            index: match.index,
+            length: match[0].length,
+            keyword: match[0],
+            className
+          });
+        }
+
+        // 按位置排序匹配项
+        matches.sort((a, b) => a.index - b.index);
+        
+        // 重建行内容
+        if (matches.length > 0) {
+          let newContent = '';
+          let currentIndex = 0;
+          
+          matches.forEach(match => {
+            // 添加匹配前的普通文本
+            if (match.index > currentIndex) {
+              const textNode = document.createTextNode(remainingText.substring(currentIndex, match.index));
+              lineDiv.appendChild(textNode);
+            }
+            
+            // 添加高亮的关键词
+            const highlightSpan = createHighlightElement(match.keyword, match.className);
+            lineDiv.appendChild(highlightSpan);
+            
+            currentIndex = match.index + match.length;
+          });
+          
+          // 添加剩余的普通文本
+          if (currentIndex < remainingText.length) {
+            const textNode = document.createTextNode(remainingText.substring(currentIndex));
+            lineDiv.appendChild(textNode);
+          }
+          
+          remainingText = lineDiv.textContent || '';
+        }
+      });
+
+      // 如果没有匹配项，直接添加文本
+      if (lineDiv.childNodes.length === 0) {
+        lineDiv.textContent = line;
+      }
+
+      highlightRef.current?.appendChild(lineDiv);
     });
-
-    // 保留换行符
-    highlightedText = highlightedText.replace(/\n/g, '<br>');
-
-    return highlightedText;
   };
 
   // 同步滚动
@@ -67,9 +125,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) =>
 
   // 更新高亮显示
   useEffect(() => {
-    if (highlightRef.current) {
-      highlightRef.current.innerHTML = applyMagicHighlighting(value);
-    }
+    applyMagicHighlighting(value);
   }, [value, language]);
 
   return (

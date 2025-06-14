@@ -296,30 +296,141 @@ const Index = () => {
     addOutput('log', '代码分享链接已复制到剪贴板！');
   }, [code, currentLanguage, programmingStyle, playSound, addOutput]);
 
+  // 文件验证函数
+  const validateImportedFile = (content: string, file: File): boolean => {
+    // 文件大小限制 (1MB)
+    const MAX_FILE_SIZE = 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      addOutput('error', '文件过大！请选择小于1MB的文件。');
+      return false;
+    }
+
+    // 文件类型验证
+    const allowedTypes = ['application/json', 'text/plain', 'text/javascript'];
+    if (!allowedTypes.includes(file.type) && !file.name.endsWith('.json') && !file.name.endsWith('.txt') && !file.name.endsWith('.js')) {
+      addOutput('error', '不支持的文件类型！请选择JSON、TXT或JS文件。');
+      return false;
+    }
+
+    // 内容长度验证
+    if (content.length > 50000) {
+      addOutput('error', '文件内容过长！请选择较小的文件。');
+      return false;
+    }
+
+    return true;
+  };
+
+  // 安全的JSON解析函数
+  const safeJsonParse = (content: string): any => {
+    try {
+      // 简单验证JSON结构，避免原型污染
+      const parsed = JSON.parse(content);
+      
+      // 检查是否包含可疑的原型污染属性
+      const suspiciousKeys = ['__proto__', 'constructor', 'prototype'];
+      const checkObject = (obj: any, depth = 0): boolean => {
+        if (depth > 10) return false; // 防止深度过大
+        if (typeof obj !== 'object' || obj === null) return true;
+        
+        for (const key of Object.keys(obj)) {
+          if (suspiciousKeys.includes(key)) {
+            return false;
+          }
+          if (typeof obj[key] === 'object' && !checkObject(obj[key], depth + 1)) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      if (!checkObject(parsed)) {
+        throw new Error('检测到可疑的对象结构');
+      }
+
+      return parsed;
+    } catch (error) {
+      throw new Error(`JSON解析失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   const handleImport = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const importedData = JSON.parse(content);
         
-        setCode(importedData.code || content);
-        saveToHistory(importedData.code || content);
-        
-        if (importedData.language) {
-          setCurrentLanguage(importedData.language);
+        // 验证文件
+        if (!validateImportedFile(content, file)) {
+          return;
         }
-        if (importedData.style) {
-          setProgrammingStyle(importedData.style);
+
+        // 尝试解析为JSON，如果失败则作为纯文本处理
+        let importedData: any = null;
+        let isJson = false;
+        
+        if (file.name.endsWith('.json') || file.type === 'application/json') {
+          try {
+            importedData = safeJsonParse(content);
+            isJson = true;
+          } catch (error) {
+            addOutput('error', `JSON文件格式错误: ${error instanceof Error ? error.message : '未知错误'}`);
+            playSound('error');
+            return;
+          }
+        }
+
+        if (isJson && importedData) {
+          // 验证JSON数据结构
+          if (typeof importedData.code !== 'string') {
+            addOutput('error', '导入失败：JSON文件必须包含有效的code字段');
+            playSound('error');
+            return;
+          }
+
+          // 验证代码长度
+          if (importedData.code.length > 10000) {
+            addOutput('error', '导入的代码过长！请选择较短的代码片段。');
+            playSound('error');
+            return;
+          }
+
+          setCode(importedData.code);
+          saveToHistory(importedData.code);
+          
+          // 安全地设置其他属性
+          if (importedData.language && ['zh', 'en'].includes(importedData.language)) {
+            setCurrentLanguage(importedData.language);
+          }
+          if (importedData.style && ['herlang', 'chinese', 'english', 'python', 'rust'].includes(importedData.style)) {
+            setProgrammingStyle(importedData.style);
+          }
+        } else {
+          // 作为纯文本处理
+          if (content.length > 10000) {
+            addOutput('error', '导入的内容过长！请选择较短的文本。');
+            playSound('error');
+            return;
+          }
+          
+          setCode(content);
+          saveToHistory(content);
         }
         
         playSound('success');
         addOutput('log', '代码导入成功！');
       } catch (error) {
+        console.error('Import error:', error); // 记录错误但不暴露敏感信息
         playSound('error');
-        addOutput('error', '导入失败：文件格式不正确');
+        addOutput('error', '导入失败：文件处理出错，请检查文件格式');
       }
     };
+    
+    reader.onerror = () => {
+      addOutput('error', '文件读取失败，请重试');
+      playSound('error');
+    };
+    
     reader.readAsText(file);
   }, [saveToHistory, playSound, addOutput]);
 
@@ -363,6 +474,11 @@ const Index = () => {
 
   return (
     <AppLayout particleTrigger={particleTrigger} particleType={particleType}>
+      {/* 添加安全提示 */}
+      <div className="mb-2 text-sm text-amber-400 bg-amber-900/20 rounded-lg p-3 border border-amber-600/30">
+        ⚠️ 安全提示：本环境会执行您输入的代码。请只运行您信任的代码，避免运行来源不明的代码片段。
+      </div>
+
       {/* Programming Style Selector */}
       <div className="mb-5">
         <ProgrammingStyleSelector 
