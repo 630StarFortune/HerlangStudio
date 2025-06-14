@@ -93,7 +93,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
                   value={key}
                   className="text-white hover:bg-white/10"
                 >
-                  {example.name}
+                  {(example as { name: string }).name}
                 </SelectItem>
               ))}
             </SelectContent>

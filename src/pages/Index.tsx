@@ -7,7 +7,7 @@ import TranslatorPanel from '@/components/TranslatorPanel';
 import ProgrammingStyleSelector from '@/components/ProgrammingStyleSelector';
 import CodeCollaboration from '@/components/CodeCollaboration';
 import { HerlangEngine } from '@/lib/herlangEngine';
-import { MultiLanguageEngine } from '@/lib/multiLanguageEngine';
+import { MultiLanguageHerlangEngine } from '@/lib/multiLanguageEngine';
 import { examples, ExampleKey } from '@/lib/examples';
 import { multiLanguageExamples } from '@/lib/multiLanguageExamples';
 import { useSounds } from '@/hooks/useSounds';
@@ -29,7 +29,7 @@ const Index = () => {
   const [outputs, setOutputs] = useState<OutputItem[]>([]);
   const [isTranslatorCollapsed, setIsTranslatorCollapsed] = useState(true);
   const [herlangEngine] = useState(() => new HerlangEngine('zh'));
-  const [multiEngine] = useState(() => new MultiLanguageEngine());
+  const [multiEngine] = useState(() => new MultiLanguageHerlangEngine());
   const [currentLanguage, setCurrentLanguage] = useState<'zh' | 'en'>('zh');
   const [programmingStyle, setProgrammingStyle] = useState<'herlang' | 'chinese' | 'english' | 'python' | 'rust'>('herlang');
   const [particleTrigger, setParticleTrigger] = useState(false);
@@ -37,7 +37,7 @@ const Index = () => {
   const dragonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const executionRef = useRef<boolean>(false);
 
-  const { history, currentIndex, addToHistory, undo, redo, canUndo, canRedo } = useCodeHistory();
+  const { history, currentIndex, saveToHistory, undo, redo, canUndo, canRedo } = useCodeHistory();
 
   const addOutput = useCallback((type: OutputItem['type'], content: string, art?: string) => {
     setOutputs(prev => [...prev, {
@@ -166,7 +166,7 @@ const Index = () => {
     
     if (exampleData) {
       setCode(exampleData.code);
-      addToHistory(exampleData.code);
+      saveToHistory(exampleData.code);
       playSound('click');
       
       setTimeout(() => {
@@ -201,7 +201,7 @@ const Index = () => {
         }
       }, 200);
     }
-  }, [currentLanguage, programmingStyle, herlangEngine, multiEngine, executeCode, addOutput, playSound, clearOutput, addToHistory]);
+  }, [currentLanguage, programmingStyle, herlangEngine, multiEngine, executeCode, addOutput, playSound, clearOutput, saveToHistory]);
 
   const handleLanguageChange = useCallback((lang: 'zh' | 'en') => {
     clearOutput();
@@ -212,7 +212,7 @@ const Index = () => {
     if (programmingStyle === 'herlang') {
       const defaultExample = examples[lang].dragon;
       setCode(defaultExample.code);
-      addToHistory(defaultExample.code);
+      saveToHistory(defaultExample.code);
       
       setTimeout(() => {
         try {
@@ -224,7 +224,7 @@ const Index = () => {
         }
       }, 200);
     }
-  }, [herlangEngine, playSound, clearOutput, executeCode, programmingStyle, addToHistory]);
+  }, [herlangEngine, playSound, clearOutput, executeCode, programmingStyle, saveToHistory]);
 
   const handleProgrammingStyleChange = useCallback((style: 'herlang' | 'chinese' | 'english' | 'python' | 'rust') => {
     clearOutput();
@@ -241,7 +241,7 @@ const Index = () => {
     
     if (defaultExample) {
       setCode(defaultExample.code);
-      addToHistory(defaultExample.code);
+      saveToHistory(defaultExample.code);
       
       setTimeout(() => {
         try {
@@ -259,12 +259,12 @@ const Index = () => {
         }
       }, 200);
     }
-  }, [currentLanguage, herlangEngine, multiEngine, playSound, clearOutput, executeCode, addToHistory]);
+  }, [currentLanguage, herlangEngine, multiEngine, playSound, clearOutput, executeCode, saveToHistory]);
 
   const handleCodeChange = useCallback((value: string) => {
     setCode(value);
-    addToHistory(value);
-  }, [addToHistory]);
+    saveToHistory(value);
+  }, [saveToHistory]);
 
   const handleUndo = useCallback(() => {
     const previousCode = undo();
@@ -304,7 +304,7 @@ const Index = () => {
         const importedData = JSON.parse(content);
         
         setCode(importedData.code || content);
-        addToHistory(importedData.code || content);
+        saveToHistory(importedData.code || content);
         
         if (importedData.language) {
           setCurrentLanguage(importedData.language);
@@ -321,7 +321,7 @@ const Index = () => {
       }
     };
     reader.readAsText(file);
-  }, [addToHistory, playSound, addOutput]);
+  }, [saveToHistory, playSound, addOutput]);
 
   const handleExport = useCallback(() => {
     const exportData = {
@@ -346,7 +346,7 @@ const Index = () => {
   React.useEffect(() => {
     const defaultExample = examples[currentLanguage].dragon;
     setCode(defaultExample.code);
-    addToHistory(defaultExample.code);
+    saveToHistory(defaultExample.code);
     
     const timeoutId = setTimeout(() => {
       try {

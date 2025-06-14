@@ -1,5 +1,5 @@
 // Multi-language Herlang engine supporting different programming styles
-export type ProgrammingStyle = 'chinese' | 'english' | 'python' | 'rust';
+export type ProgrammingStyle = 'herlang' | 'chinese' | 'english' | 'python' | 'rust';
 
 // Python-style Herlang dictionary
 export const DICTIONARY_PYTHON = {
@@ -95,7 +95,7 @@ export class MultiLanguageHerlangEngine {
         '你再说一遍': 'while',
         '下头': 'break',
         '输出': 'console.log',
-        '我想说': 'console.log',
+        '我想说': 'console.log', 
         '反手举报': 'console.warn',
         '哼': 'throw new Error("哼！我不干了！")',
         '那么普通却那么自信': 'true',
@@ -274,7 +274,7 @@ export class MultiLanguageHerlangEngine {
   }
 
   getAvailableStyles(): ProgrammingStyle[] {
-    return ['chinese', 'english', 'python', 'rust'];
+    return ['herlang', 'chinese', 'english', 'python', 'rust'];
   }
 
   getStyleDisplayName(style: ProgrammingStyle): string {
@@ -287,3 +287,6 @@ export class MultiLanguageHerlangEngine {
     return names[style];
   }
 }
+
+// Keep the old export for backward compatibility
+export const MultiLanguageEngine = MultiLanguageHerlangEngine;
