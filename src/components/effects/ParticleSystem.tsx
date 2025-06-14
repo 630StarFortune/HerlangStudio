@@ -1,17 +1,20 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 
+type ParticleType = 'code' | 'star' | 'heart' | 'sparkle';
+
 interface Particle {
+  id: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
-  size: number;
   life: number;
   maxLife: number;
+  type: ParticleType;
+  size: number;
   color: string;
-  type: 'star' | 'code' | 'heart' | 'sparkle';
 }
 
 interface ParticleSystemProps {
@@ -21,143 +24,146 @@ interface ParticleSystemProps {
 }
 
 const ParticleSystem: React.FC<ParticleSystemProps> = ({ 
-  trigger = false, 
-  type = 'ambient',
+  trigger, 
+  type = 'ambient', 
   intensity = 1 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Particle[]>([]);
+  const [particles, setParticles] = useState<Particle[]>([]);
   const animationRef = useRef<number>();
   const { currentTheme } = useTheme();
+
+  const particleTypes: ParticleType[] = ['code', 'star', 'heart', 'sparkle'];
 
   const createParticle = (x?: number, y?: number): Particle => {
     const canvas = canvasRef.current;
     if (!canvas) return {} as Particle;
 
-    const colors = {
-      success: [currentTheme.colors.accent, currentTheme.colors.primary],
-      error: ['#ff4757', '#ff3742'],
-      code: [currentTheme.colors.primary, currentTheme.colors.secondary],
-      ambient: [currentTheme.colors.primary, currentTheme.colors.secondary, currentTheme.colors.accent]
-    };
-
-    const particleTypes: Array<Particle['type']> = {
-      success: ['star', 'sparkle'],
-      error: ['sparkle'],
-      code: ['code', 'sparkle'],
-      ambient: ['star', 'sparkle', 'heart']
-    }[type];
+    const colors = [
+      currentTheme.colors.primary,
+      currentTheme.colors.secondary,
+      currentTheme.colors.accent
+    ];
 
     return {
+      id: Math.random(),
       x: x ?? Math.random() * canvas.width,
       y: y ?? Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 4 * intensity,
-      vy: (Math.random() - 0.5) * 4 * intensity,
-      size: Math.random() * 6 + 2,
-      life: 1,
-      maxLife: Math.random() * 60 + 30,
-      color: colors[type][Math.floor(Math.random() * colors[type].length)],
-      type: particleTypes[Math.floor(Math.random() * particleTypes.length)]
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
+      life: 0,
+      maxLife: 60 + Math.random() * 120,
+      type: particleTypes[Math.floor(Math.random() * particleTypes.length)],
+      size: 2 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)]
     };
   };
 
-  const drawParticle = (ctx: CanvasRenderingContext2D, particle: Particle) => {
-    const alpha = particle.life / particle.maxLife;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = particle.color;
-    ctx.translate(particle.x, particle.y);
+  const updateParticles = () => {
+    setParticles(prev => {
+      const updated = prev.map(particle => ({
+        ...particle,
+        x: particle.x + particle.vx,
+        y: particle.y + particle.vy,
+        life: particle.life + 1,
+        vy: particle.vy + 0.02 // gravity
+      })).filter(particle => particle.life < particle.maxLife);
 
-    switch (particle.type) {
-      case 'star':
-        drawStar(ctx, particle.size);
-        break;
-      case 'heart':
-        drawHeart(ctx, particle.size);
-        break;
-      case 'code':
-        drawCodeSymbol(ctx, particle.size);
-        break;
-      case 'sparkle':
-        drawSparkle(ctx, particle.size);
-        break;
-    }
-    ctx.restore();
+      // Add new particles for ambient effect
+      if (type === 'ambient' && Math.random() < 0.02 * intensity) {
+        updated.push(createParticle());
+      }
+
+      return updated;
+    });
   };
 
-  const drawStar = (ctx: CanvasRenderingContext2D, size: number) => {
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const angle = (i * Math.PI * 2) / 5;
-      const x = Math.cos(angle) * size;
-      const y = Math.sin(angle) * size;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-  };
-
-  const drawHeart = (ctx: CanvasRenderingContext2D, size: number) => {
-    ctx.beginPath();
-    ctx.moveTo(0, size * 0.3);
-    ctx.bezierCurveTo(-size * 0.5, -size * 0.2, -size, -size * 0.2, -size * 0.5, size * 0.3);
-    ctx.bezierCurveTo(-size * 0.5, size * 0.8, 0, size, 0, size);
-    ctx.bezierCurveTo(0, size, size * 0.5, size * 0.8, size * 0.5, size * 0.3);
-    ctx.bezierCurveTo(size, -size * 0.2, size * 0.5, -size * 0.2, 0, size * 0.3);
-    ctx.fill();
-  };
-
-  const drawCodeSymbol = (ctx: CanvasRenderingContext2D, size: number) => {
-    ctx.font = `${size}px monospace`;
-    ctx.textAlign = 'center';
-    const symbols = ['<', '>', '{', '}', '(', ')', ';', '='];
-    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-    ctx.fillText(symbol, 0, size / 2);
-  };
-
-  const drawSparkle = (ctx: CanvasRenderingContext2D, size: number) => {
-    ctx.beginPath();
-    ctx.arc(0, 0, size, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Add sparkle effect
-    ctx.strokeStyle = ctx.fillStyle;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-size * 1.5, 0);
-    ctx.lineTo(size * 1.5, 0);
-    ctx.moveTo(0, -size * 1.5);
-    ctx.lineTo(0, size * 1.5);
-    ctx.stroke();
-  };
-
-  const animate = () => {
+  const drawParticles = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Update and draw particles
-    particlesRef.current = particlesRef.current.filter(particle => {
-      particle.x += particle.vx;
-      particle.y += particle.vy;
-      particle.life -= 1;
+    particles.forEach(particle => {
+      const alpha = 1 - (particle.life / particle.maxLife);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = particle.color;
       
-      drawParticle(ctx, particle);
+      // Draw different shapes based on type
+      switch (particle.type) {
+        case 'star':
+          drawStar(ctx, particle.x, particle.y, particle.size);
+          break;
+        case 'heart':
+          drawHeart(ctx, particle.x, particle.y, particle.size);
+          break;
+        case 'sparkle':
+          drawSparkle(ctx, particle.x, particle.y, particle.size);
+          break;
+        default:
+          ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
+      }
       
-      return particle.life > 0;
+      ctx.restore();
     });
+  };
 
-    // Add new ambient particles
-    if (type === 'ambient' && Math.random() < 0.02 * intensity) {
-      particlesRef.current.push(createParticle());
+  const drawStar = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const angle = (i * Math.PI * 2) / 5;
+      const x1 = x + Math.cos(angle) * size;
+      const y1 = y + Math.sin(angle) * size;
+      if (i === 0) ctx.moveTo(x1, y1);
+      else ctx.lineTo(x1, y1);
     }
+    ctx.closePath();
+    ctx.fill();
+  };
 
+  const drawHeart = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+    ctx.beginPath();
+    ctx.arc(x - size/2, y - size/2, size/2, 0, Math.PI * 2);
+    ctx.arc(x + size/2, y - size/2, size/2, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  const drawSparkle = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x, y + size);
+    ctx.moveTo(x - size, y);
+    ctx.lineTo(x + size, y);
+    ctx.stroke();
+  };
+
+  const animate = () => {
+    updateParticles();
+    drawParticles();
     animationRef.current = requestAnimationFrame(animate);
   };
 
+  // Handle trigger effect
+  useEffect(() => {
+    if (trigger && type !== 'ambient') {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const particleCount = Math.floor(20 * intensity);
+      const newParticles = Array.from({ length: particleCount }, () => 
+        createParticle(
+          canvas.width / 2 + (Math.random() - 0.5) * 100,
+          canvas.height / 2 + (Math.random() - 0.5) * 100
+        )
+      );
+      
+      setParticles(prev => [...prev, ...newParticles]);
+    }
+  }, [trigger, type, intensity]);
+
+  // Setup canvas and animation
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -171,7 +177,7 @@ const ParticleSystem: React.FC<ParticleSystemProps> = ({
     window.addEventListener('resize', resizeCanvas);
 
     if (currentTheme.effects.particles) {
-      animate();
+      animationRef.current = requestAnimationFrame(animate);
     }
 
     return () => {
@@ -180,22 +186,7 @@ const ParticleSystem: React.FC<ParticleSystemProps> = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [currentTheme.effects.particles, type, intensity]);
-
-  useEffect(() => {
-    if (trigger && type !== 'ambient') {
-      // Create burst of particles
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      
-      for (let i = 0; i < 20 * intensity; i++) {
-        particlesRef.current.push(createParticle(centerX, centerY));
-      }
-    }
-  }, [trigger, type, intensity]);
+  }, [currentTheme.effects.particles]);
 
   if (!currentTheme.effects.particles) return null;
 

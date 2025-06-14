@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSounds } from '@/hooks/useSounds';
 import { Palette } from 'lucide-react';
@@ -23,18 +22,17 @@ const ThemeSelector: React.FC = () => {
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="bg-black/90 border-white/20">
-          {availableThemes.map((themeName) => {
-            const theme = require('@/contexts/ThemeContext').themes[themeName];
-            return (
-              <SelectItem 
-                key={themeName} 
-                value={themeName}
-                className="text-white hover:bg-white/10"
-              >
-                {theme.name}
-              </SelectItem>
-            );
-          })}
+          {availableThemes.map((themeName) => (
+            <SelectItem 
+              key={themeName} 
+              value={themeName}
+              className="text-white hover:bg-white/10"
+            >
+              {themeName === 'starlight' ? '✨ 星光幻境' : 
+               themeName === 'cyberpunk' ? '🌃 赛博朋克' : 
+               themeName === 'sunset' ? '🌅 日落余晖' : themeName}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>
