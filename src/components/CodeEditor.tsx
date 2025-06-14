@@ -1,9 +1,11 @@
 
 import React, { useEffect, useRef } from 'react';
 import { UnControlled as CodeMirror } from 'react-codemirror2';
-import 'codemirror/lib/codemirror.css';
-import 'codemirror/theme/dracula.css';
-import 'codemirror/mode/javascript/javascript.js';
+
+// Import CodeMirror CSS and theme using require to avoid path resolution issues
+require('codemirror/lib/codemirror.css');
+require('codemirror/theme/dracula.css');
+require('codemirror/mode/javascript/javascript');
 
 interface CodeEditorProps {
   value: string;
