@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -77,6 +76,7 @@ const Index = () => {
         },
         openBlindBox: () => {
           const result = HerlangEngine.builtins.openBlindBox();
+          addOutput('log', `今日盲盒开出了： ${result}`);
           playSound('magic');
           return result;
         }
