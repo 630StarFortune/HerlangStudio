@@ -1,6 +1,5 @@
 
-import React, { useEffect, useRef } from 'react';
-import { UnControlled as CodeMirror } from 'react-codemirror2';
+import React, { useRef, useEffect, useState } from 'react';
 
 interface CodeEditorProps {
   value: string;
@@ -9,26 +8,18 @@ interface CodeEditorProps {
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) => {
-  const editorRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const [lineNumbers, setLineNumbers] = useState<number[]>([]);
 
-  // 动态导入 CodeMirror 资源
+  // 更新行号
   useEffect(() => {
-    const loadCodeMirrorAssets = async () => {
-      try {
-        // 动态导入 CSS
-        await import('codemirror/lib/codemirror.css');
-        await import('codemirror/theme/dracula.css');
-        // 动态导入 JavaScript 模式
-        await import('codemirror/mode/javascript/javascript');
-      } catch (error) {
-        console.log('CodeMirror assets loaded via dynamic import');
-      }
-    };
+    const lines = value.split('\n');
+    setLineNumbers(Array.from({ length: lines.length }, (_, i) => i + 1));
+  }, [value]);
 
-    loadCodeMirrorAssets();
-  }, []);
-
-  const applyMagicHighlighting = (editor: any) => {
+  // 应用魔法高亮
+  const applyMagicHighlighting = (text: string) => {
     const highlights = language === 'zh' ? {
       '那么普通却那么自信': 'herlang-rainbow',
       '小仙女': 'herlang-shining', 
@@ -41,26 +32,45 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) =>
       'give up': 'herlang-shake',
     };
 
-    editor.eachLine((lineHandle: any) => {
-      const lineNo = editor.getLineNumber(lineHandle);
-      if (lineHandle.markedSpans) {
-        lineHandle.markedSpans.forEach((span: any) => span.marker.clear());
-      }
-      const text = editor.getLine(lineNo);
-      
-      Object.keys(highlights).forEach(keyword => {
-        let cursor = text.indexOf(keyword);
-        while (cursor > -1) {
-          editor.markText(
-            { line: lineNo, ch: cursor }, 
-            { line: lineNo, ch: cursor + keyword.length },
-            { className: highlights[keyword as keyof typeof highlights] }
-          );
-          cursor = text.indexOf(keyword, cursor + 1);
-        }
-      });
+    let highlightedText = text;
+    
+    // 转义HTML字符
+    highlightedText = highlightedText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // 应用关键词高亮
+    Object.entries(highlights).forEach(([keyword, className]) => {
+      const regex = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g');
+      highlightedText = highlightedText.replace(
+        regex, 
+        `<span class="${className}">$1</span>`
+      );
     });
+
+    // 保留换行符
+    highlightedText = highlightedText.replace(/\n/g, '<br>');
+
+    return highlightedText;
   };
+
+  // 同步滚动
+  const handleScroll = () => {
+    if (textareaRef.current && highlightRef.current) {
+      highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+      highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  };
+
+  // 更新高亮显示
+  useEffect(() => {
+    if (highlightRef.current) {
+      highlightRef.current.innerHTML = applyMagicHighlighting(value);
+    }
+  }, [value, language]);
 
   return (
     <div className="h-full relative">
@@ -85,30 +95,93 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) =>
           25% { transform: translateX(-2px); }
           75% { transform: translateX(2px); }
         }
-        .CodeMirror {
+        .code-editor-container {
+          position: relative;
           height: 100%;
-          font-size: 16px;
+          background: #282a36;
           border-radius: 0 0 10px 10px;
+          overflow: hidden;
+        }
+        .line-numbers {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 50px;
+          height: 100%;
+          background: #44475a;
+          color: #6272a4;
+          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 24px;
+          padding: 16px 8px;
+          border-right: 1px solid #6272a4;
+          user-select: none;
+          overflow: hidden;
+        }
+        .code-textarea {
+          position: absolute;
+          left: 50px;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          background: transparent;
+          color: #f8f8f2;
+          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 24px;
+          padding: 16px;
+          border: none;
+          outline: none;
+          resize: none;
+          z-index: 2;
+          white-space: pre;
+          overflow-wrap: normal;
+          overflow-x: auto;
+        }
+        .code-highlight {
+          position: absolute;
+          left: 50px;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          color: #f8f8f2;
+          font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 16px;
+          line-height: 24px;
+          padding: 16px;
+          pointer-events: none;
+          z-index: 1;
+          white-space: pre;
+          overflow-wrap: normal;
+          overflow: auto;
         }
       `}</style>
       
-      <CodeMirror
-        value={value}
-        options={{
-          lineNumbers: true,
-          mode: 'javascript',
-          theme: 'dracula',
-          lineWrapping: true,
-        }}
-        onChange={(editor, data, value) => {
-          onChange(value);
-          applyMagicHighlighting(editor);
-        }}
-        editorDidMount={(editor) => {
-          editorRef.current = editor;
-          applyMagicHighlighting(editor);
-        }}
-      />
+      <div className="code-editor-container">
+        <div className="line-numbers">
+          {lineNumbers.map(num => (
+            <div key={num}>{num}</div>
+          ))}
+        </div>
+        
+        <div 
+          ref={highlightRef}
+          className="code-highlight"
+        />
+        
+        <textarea
+          ref={textareaRef}
+          className="code-textarea"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={handleScroll}
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-gramm="false"
+        />
+      </div>
     </div>
   );
 };
