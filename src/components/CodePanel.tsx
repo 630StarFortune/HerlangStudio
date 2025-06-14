@@ -8,6 +8,7 @@ import LanguageSwitch from './LanguageSwitch';
 import { Play } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { examples, ExampleKey } from '@/lib/examples';
+import { multiLanguageExamples } from '@/lib/multiLanguageExamples';
 
 interface CodePanelProps {
   code: string;
@@ -17,6 +18,7 @@ interface CodePanelProps {
   onLanguageChange: (lang: 'zh' | 'en') => void;
   onType: () => void;
   currentLanguage: 'zh' | 'en';
+  programmingStyle: 'herlang' | 'chinese' | 'english' | 'python' | 'rust';
 }
 
 const CodePanel: React.FC<CodePanelProps> = ({
@@ -26,7 +28,8 @@ const CodePanel: React.FC<CodePanelProps> = ({
   onExampleSelect,
   onLanguageChange,
   onType,
-  currentLanguage
+  currentLanguage,
+  programmingStyle
 }) => {
   const { t } = useTranslation();
   const { currentTheme } = useTheme();
@@ -45,6 +48,17 @@ const CodePanel: React.FC<CodePanelProps> = ({
     fontWeight: 'bold',
     boxShadow: `0 4px 15px ${currentTheme.colors.primary}40`
   };
+
+  // 根据编程样式获取示例
+  const getExamples = () => {
+    if (programmingStyle === 'herlang') {
+      return examples[currentLanguage];
+    } else {
+      return multiLanguageExamples[programmingStyle] || {};
+    }
+  };
+
+  const currentExamples = getExamples();
 
   return (
     <div 
@@ -73,7 +87,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
               <SelectValue placeholder={t('examples')} />
             </SelectTrigger>
             <SelectContent className="bg-black/90 border-white/20">
-              {Object.entries(examples[currentLanguage]).map(([key, example]) => (
+              {Object.entries(currentExamples).map(([key, example]) => (
                 <SelectItem 
                   key={key} 
                   value={key}
@@ -85,7 +99,9 @@ const CodePanel: React.FC<CodePanelProps> = ({
             </SelectContent>
           </Select>
           
-          <LanguageSwitch onLanguageChange={onLanguageChange} />
+          {programmingStyle === 'herlang' && (
+            <LanguageSwitch onLanguageChange={onLanguageChange} />
+          )}
           
           <Button 
             onClick={onRunCode}

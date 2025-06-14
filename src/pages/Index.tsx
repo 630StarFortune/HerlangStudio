@@ -1,13 +1,17 @@
-
 import React, { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import AppLayout from '@/components/AppLayout';
 import CodePanel from '@/components/CodePanel';
 import OutputPanelWrapper from '@/components/OutputPanelWrapper';
 import TranslatorPanel from '@/components/TranslatorPanel';
+import ProgrammingStyleSelector from '@/components/ProgrammingStyleSelector';
+import CodeCollaboration from '@/components/CodeCollaboration';
 import { HerlangEngine } from '@/lib/herlangEngine';
+import { MultiLanguageEngine } from '@/lib/multiLanguageEngine';
 import { examples, ExampleKey } from '@/lib/examples';
+import { multiLanguageExamples } from '@/lib/multiLanguageExamples';
 import { useSounds } from '@/hooks/useSounds';
+import { useCodeHistory } from '@/hooks/useCodeHistory';
 import '../i18n';
 
 interface OutputItem {
@@ -25,10 +29,15 @@ const Index = () => {
   const [outputs, setOutputs] = useState<OutputItem[]>([]);
   const [isTranslatorCollapsed, setIsTranslatorCollapsed] = useState(true);
   const [herlangEngine] = useState(() => new HerlangEngine('zh'));
+  const [multiEngine] = useState(() => new MultiLanguageEngine());
   const [currentLanguage, setCurrentLanguage] = useState<'zh' | 'en'>('zh');
+  const [programmingStyle, setProgrammingStyle] = useState<'herlang' | 'chinese' | 'english' | 'python' | 'rust'>('herlang');
   const [particleTrigger, setParticleTrigger] = useState(false);
   const [particleType, setParticleType] = useState<'success' | 'error' | 'code'>('success');
   const dragonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const executionRef = useRef<boolean>(false);
+
+  const { history, currentIndex, addToHistory, undo, redo, canUndo, canRedo } = useCodeHistory();
 
   const addOutput = useCallback((type: OutputItem['type'], content: string, art?: string) => {
     setOutputs(prev => [...prev, {
@@ -49,6 +58,10 @@ const Index = () => {
   }, [playSound]);
 
   const executeCode = useCallback((jsCode: string) => {
+    // 防止重复执行
+    if (executionRef.current) return;
+    executionRef.current = true;
+
     const interceptedConsole = {
       log: (...args: any[]) => {
         addOutput('log', args.join(' '));
@@ -91,16 +104,31 @@ const Index = () => {
       playSound('error');
       setParticleType('error');
       setParticleTrigger(prev => !prev);
+    } finally {
+      // 重置执行标志
+      setTimeout(() => {
+        executionRef.current = false;
+      }, 100);
     }
   }, [addOutput, playSound, playMelody]);
 
   const runCode = useCallback(() => {
+    // 防止重复执行
+    if (executionRef.current) return;
+    
     clearOutput();
     
     if (!code.trim()) return;
 
+    let jsCode = '';
+    
     try {
-      const jsCode = herlangEngine.translateToJS(code);
+      if (programmingStyle === 'herlang') {
+        jsCode = herlangEngine.translateToJS(code);
+      } else {
+        jsCode = multiEngine.translateToJS(code, programmingStyle);
+      }
+      
       setTranslatedCode(jsCode);
       executeCode(jsCode);
       playSound('success');
@@ -122,21 +150,34 @@ const Index = () => {
       setParticleType('error');
       setParticleTrigger(prev => !prev);
     }
-  }, [code, herlangEngine, clearOutput, executeCode, addOutput, playSound]);
+  }, [code, herlangEngine, multiEngine, programmingStyle, clearOutput, executeCode, addOutput, playSound]);
 
   const insertExample = useCallback((exampleKey: string) => {
-    if (!exampleKey) return;
+    if (!exampleKey || executionRef.current) return;
     
     clearOutput();
     
-    const exampleData = examples[currentLanguage][exampleKey as ExampleKey];
+    let exampleData;
+    if (programmingStyle === 'herlang') {
+      exampleData = examples[currentLanguage][exampleKey as ExampleKey];
+    } else {
+      exampleData = multiLanguageExamples[programmingStyle]?.[exampleKey];
+    }
+    
     if (exampleData) {
       setCode(exampleData.code);
+      addToHistory(exampleData.code);
       playSound('click');
       
       setTimeout(() => {
         try {
-          const jsCode = herlangEngine.translateToJS(exampleData.code);
+          let jsCode = '';
+          if (programmingStyle === 'herlang') {
+            jsCode = herlangEngine.translateToJS(exampleData.code);
+          } else {
+            jsCode = multiEngine.translateToJS(exampleData.code, programmingStyle);
+          }
+          
           setTranslatedCode(jsCode);
           executeCode(jsCode);
           playSound('success');
@@ -158,9 +199,9 @@ const Index = () => {
           setParticleType('error');
           setParticleTrigger(prev => !prev);
         }
-      }, 100);
+      }, 200);
     }
-  }, [currentLanguage, herlangEngine, executeCode, addOutput, playSound, clearOutput]);
+  }, [currentLanguage, programmingStyle, herlangEngine, multiEngine, executeCode, addOutput, playSound, clearOutput, addToHistory]);
 
   const handleLanguageChange = useCallback((lang: 'zh' | 'en') => {
     clearOutput();
@@ -168,23 +209,144 @@ const Index = () => {
     herlangEngine.setLanguage(lang);
     playSound('magic');
     
-    const defaultExample = examples[lang].dragon;
-    setCode(defaultExample.code);
+    if (programmingStyle === 'herlang') {
+      const defaultExample = examples[lang].dragon;
+      setCode(defaultExample.code);
+      addToHistory(defaultExample.code);
+      
+      setTimeout(() => {
+        try {
+          const jsCode = herlangEngine.translateToJS(defaultExample.code);
+          setTranslatedCode(jsCode);
+          executeCode(jsCode);
+        } catch (error) {
+          console.error('Language change execution error:', error);
+        }
+      }, 200);
+    }
+  }, [herlangEngine, playSound, clearOutput, executeCode, programmingStyle, addToHistory]);
+
+  const handleProgrammingStyleChange = useCallback((style: 'herlang' | 'chinese' | 'english' | 'python' | 'rust') => {
+    clearOutput();
+    setProgrammingStyle(style);
+    playSound('magic');
     
-    setTimeout(() => {
+    let defaultExample;
+    if (style === 'herlang') {
+      defaultExample = examples[currentLanguage].dragon;
+    } else {
+      const styleExamples = multiLanguageExamples[style];
+      defaultExample = styleExamples ? Object.values(styleExamples)[0] : null;
+    }
+    
+    if (defaultExample) {
+      setCode(defaultExample.code);
+      addToHistory(defaultExample.code);
+      
+      setTimeout(() => {
+        try {
+          let jsCode = '';
+          if (style === 'herlang') {
+            jsCode = herlangEngine.translateToJS(defaultExample.code);
+          } else {
+            jsCode = multiEngine.translateToJS(defaultExample.code, style);
+          }
+          
+          setTranslatedCode(jsCode);
+          executeCode(jsCode);
+        } catch (error) {
+          console.error('Programming style change execution error:', error);
+        }
+      }, 200);
+    }
+  }, [currentLanguage, herlangEngine, multiEngine, playSound, clearOutput, executeCode, addToHistory]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    setCode(value);
+    addToHistory(value);
+  }, [addToHistory]);
+
+  const handleUndo = useCallback(() => {
+    const previousCode = undo();
+    if (previousCode !== undefined) {
+      setCode(previousCode);
+      playSound('click');
+    }
+  }, [undo, playSound]);
+
+  const handleRedo = useCallback(() => {
+    const nextCode = redo();
+    if (nextCode !== undefined) {
+      setCode(nextCode);
+      playSound('click');
+    }
+  }, [redo, playSound]);
+
+  const handleShare = useCallback(() => {
+    const shareData = {
+      code,
+      language: currentLanguage,
+      style: programmingStyle,
+      timestamp: Date.now()
+    };
+    
+    const shareUrl = `${window.location.origin}?shared=${encodeURIComponent(JSON.stringify(shareData))}`;
+    navigator.clipboard.writeText(shareUrl);
+    playSound('success');
+    addOutput('log', '代码分享链接已复制到剪贴板！');
+  }, [code, currentLanguage, programmingStyle, playSound, addOutput]);
+
+  const handleImport = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
       try {
-        const jsCode = herlangEngine.translateToJS(defaultExample.code);
-        setTranslatedCode(jsCode);
-        executeCode(jsCode);
+        const content = e.target?.result as string;
+        const importedData = JSON.parse(content);
+        
+        setCode(importedData.code || content);
+        addToHistory(importedData.code || content);
+        
+        if (importedData.language) {
+          setCurrentLanguage(importedData.language);
+        }
+        if (importedData.style) {
+          setProgrammingStyle(importedData.style);
+        }
+        
+        playSound('success');
+        addOutput('log', '代码导入成功！');
       } catch (error) {
-        console.error('Language change execution error:', error);
+        playSound('error');
+        addOutput('error', '导入失败：文件格式不正确');
       }
-    }, 100);
-  }, [herlangEngine, playSound, clearOutput, executeCode]);
+    };
+    reader.readAsText(file);
+  }, [addToHistory, playSound, addOutput]);
+
+  const handleExport = useCallback(() => {
+    const exportData = {
+      code,
+      language: currentLanguage,
+      style: programmingStyle,
+      timestamp: Date.now()
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `herlang_code_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    playSound('success');
+    addOutput('log', '代码导出成功！');
+  }, [code, currentLanguage, programmingStyle, playSound, addOutput]);
 
   React.useEffect(() => {
     const defaultExample = examples[currentLanguage].dragon;
     setCode(defaultExample.code);
+    addToHistory(defaultExample.code);
     
     const timeoutId = setTimeout(() => {
       try {
@@ -201,16 +363,38 @@ const Index = () => {
 
   return (
     <AppLayout particleTrigger={particleTrigger} particleType={particleType}>
+      {/* Programming Style Selector */}
+      <div className="mb-5">
+        <ProgrammingStyleSelector 
+          currentStyle={programmingStyle}
+          onStyleChange={handleProgrammingStyleChange}
+        />
+      </div>
+
+      {/* Code Collaboration */}
+      <div className="mb-5">
+        <CodeCollaboration
+          onShare={handleShare}
+          onImport={handleImport}
+          onExport={handleExport}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+        />
+      </div>
+
       {/* Main Content */}
       <div className="flex gap-5 mb-5" style={{ height: '70vh' }}>
         <CodePanel
           code={code}
-          onCodeChange={setCode}
+          onCodeChange={handleCodeChange}
           onRunCode={runCode}
           onExampleSelect={insertExample}
           onLanguageChange={handleLanguageChange}
           onType={() => playSound('type')}
           currentLanguage={currentLanguage}
+          programmingStyle={programmingStyle}
         />
         
         <OutputPanelWrapper outputs={outputs} onClear={clearOutput} />
