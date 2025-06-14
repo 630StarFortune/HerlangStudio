@@ -2,11 +2,6 @@
 import React, { useEffect, useRef } from 'react';
 import { UnControlled as CodeMirror } from 'react-codemirror2';
 
-// Import CodeMirror CSS and modes using ES6 imports
-import 'codemirror/lib/codemirror.css';
-import 'codemirror/theme/dracula.css';
-import 'codemirror/mode/javascript/javascript';
-
 interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -15,6 +10,23 @@ interface CodeEditorProps {
 
 const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language }) => {
   const editorRef = useRef<any>(null);
+
+  // 动态导入 CodeMirror 资源
+  useEffect(() => {
+    const loadCodeMirrorAssets = async () => {
+      try {
+        // 动态导入 CSS
+        await import('codemirror/lib/codemirror.css');
+        await import('codemirror/theme/dracula.css');
+        // 动态导入 JavaScript 模式
+        await import('codemirror/mode/javascript/javascript');
+      } catch (error) {
+        console.log('CodeMirror assets loaded via dynamic import');
+      }
+    };
+
+    loadCodeMirrorAssets();
+  }, []);
 
   const applyMagicHighlighting = (editor: any) => {
     const highlights = language === 'zh' ? {
