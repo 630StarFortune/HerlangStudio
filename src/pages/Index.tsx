@@ -7,9 +7,13 @@ import CodeEditor from '@/components/CodeEditor';
 import OutputPanel from '@/components/OutputPanel';
 import TranslatorPanel from '@/components/TranslatorPanel';
 import LanguageSwitch from '@/components/LanguageSwitch';
+import ThemeSelector from '@/components/ThemeSelector';
+import ParticleSystem from '@/components/effects/ParticleSystem';
 import { HerlangEngine } from '@/lib/herlangEngine';
 import { examples, ExampleKey } from '@/lib/examples';
-import { Play, Eraser } from 'lucide-react';
+import { Play, Eraser, Sparkles } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useSounds } from '@/hooks/useSounds';
 import '../i18n';
 
 interface OutputItem {
@@ -21,12 +25,16 @@ interface OutputItem {
 
 const Index = () => {
   const { t, i18n } = useTranslation();
+  const { currentTheme } = useTheme();
+  const { playSound, playMelody } = useSounds();
   const [code, setCode] = useState('');
   const [translatedCode, setTranslatedCode] = useState('');
   const [outputs, setOutputs] = useState<OutputItem[]>([]);
   const [isTranslatorCollapsed, setIsTranslatorCollapsed] = useState(true);
   const [herlangEngine] = useState(() => new HerlangEngine('zh'));
   const [currentLanguage, setCurrentLanguage] = useState<'zh' | 'en'>('zh');
+  const [particleTrigger, setParticleTrigger] = useState(false);
+  const [particleType, setParticleType] = useState<'success' | 'error' | 'code'>('success');
 
   const addOutput = useCallback((type: OutputItem['type'], content: string, art?: string) => {
     setOutputs(prev => [...prev, {
@@ -39,7 +47,8 @@ const Index = () => {
 
   const clearOutput = useCallback(() => {
     setOutputs([]);
-  }, []);
+    playSound('click');
+  }, [playSound]);
 
   const executeCode = useCallback((jsCode: string) => {
     const interceptedConsole = {
@@ -58,22 +67,31 @@ const Index = () => {
           const result = HerlangEngine.builtins.summonDragon(wish);
           setTimeout(() => {
             addOutput('dragon', result.message, result.art);
+            playSound('dragon');
+            setParticleType('success');
+            setParticleTrigger(prev => !prev);
           }, 2000);
           
-          // Show dragon art immediately
           addOutput('dragon', '', result.art);
+          playMelody([523, 659, 784, 1047]); // C-E-G-C melody
         },
         openBlindBox: () => {
-          return HerlangEngine.builtins.openBlindBox();
+          const result = HerlangEngine.builtins.openBlindBox();
+          playSound('magic');
+          return result;
         }
       });
     } catch (error) {
       addOutput('error', `执行错误: ${error}`);
+      playSound('error');
+      setParticleType('error');
+      setParticleTrigger(prev => !prev);
     }
-  }, [addOutput]);
+  }, [addOutput, playSound, playMelody]);
 
   const runCode = useCallback(() => {
     clearOutput();
+    playSound('click');
     
     if (!code.trim()) return;
 
@@ -81,6 +99,9 @@ const Index = () => {
       const jsCode = herlangEngine.translateToJS(code);
       setTranslatedCode(jsCode);
       executeCode(jsCode);
+      playSound('success');
+      setParticleType('success');
+      setParticleTrigger(prev => !prev);
     } catch (error: any) {
       let errorMessage = error.message;
       const match = errorMessage.match(/\((\d+):(\d+)\)/);
@@ -93,8 +114,11 @@ const Index = () => {
       }
       
       addOutput('error', errorMessage);
+      playSound('error');
+      setParticleType('error');
+      setParticleTrigger(prev => !prev);
     }
-  }, [code, herlangEngine, clearOutput, executeCode, addOutput]);
+  }, [code, herlangEngine, clearOutput, executeCode, addOutput, playSound]);
 
   const insertExample = useCallback((exampleKey: string) => {
     if (!exampleKey) return;
@@ -102,19 +126,19 @@ const Index = () => {
     const exampleData = examples[currentLanguage][exampleKey as ExampleKey];
     if (exampleData) {
       setCode(exampleData.code);
-      // Auto-run the example
+      playSound('click');
       setTimeout(() => runCode(), 100);
     }
-  }, [currentLanguage, runCode]);
+  }, [currentLanguage, runCode, playSound]);
 
   const handleLanguageChange = useCallback((lang: 'zh' | 'en') => {
     setCurrentLanguage(lang);
     herlangEngine.setLanguage(lang);
+    playSound('magic');
     
-    // Load default example for the new language
     const defaultExample = examples[lang].dragon;
     setCode(defaultExample.code);
-  }, [herlangEngine]);
+  }, [herlangEngine, playSound]);
 
   // Load default example on mount
   React.useEffect(() => {
@@ -123,91 +147,166 @@ const Index = () => {
     setTimeout(() => runCode(), 500);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 p-5">
-      <style>{`
-        .panel-shadow {
-          box-shadow: 0 4px 15px rgba(255, 105, 180, 0.2);
-        }
-      `}</style>
-      
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-4xl font-bold text-pink-600 mb-4 drop-shadow-lg">
-            {t('title')}
-          </h1>
-        </div>
+  const backgroundStyle = {
+    background: currentTheme.gradients.main,
+    minHeight: '100vh'
+  };
 
-        {/* Main Content */}
-        <div className="flex gap-5 mb-5" style={{ height: '70vh' }}>
-          {/* Left Panel - Code Editor */}
-          <div className="flex-1 bg-white rounded-xl panel-shadow border-2 border-pink-200 flex flex-col">
-            <div className="flex items-center justify-between p-4 bg-pink-100 rounded-t-xl border-b-2 border-pink-200">
-              <span className="font-bold text-pink-600 text-lg">
-                {t('codeEditor')}
-              </span>
-              <div className="flex items-center gap-3">
-                <Select onValueChange={insertExample}>
-                  <SelectTrigger className="w-48 bg-pink-500 text-white border-pink-600 hover:bg-pink-600">
-                    <SelectValue placeholder={t('examples')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(examples[currentLanguage]).map(([key, example]) => (
-                      <SelectItem key={key} value={key}>
-                        {example.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <LanguageSwitch onLanguageChange={handleLanguageChange} />
-                
-                <Button 
-                  onClick={runCode}
-                  className="bg-pink-500 hover:bg-pink-600 text-white font-bold px-4 py-2 rounded-full transition-all hover:scale-105"
+  const cardStyle = {
+    background: currentTheme.gradients.card,
+    backdropFilter: 'blur(20px)',
+    border: `1px solid ${currentTheme.colors.primary}20`,
+    boxShadow: `0 8px 32px ${currentTheme.colors.primary}20`
+  };
+
+  const buttonStyle = {
+    background: currentTheme.gradients.button,
+    border: 'none',
+    color: 'white',
+    fontWeight: 'bold',
+    boxShadow: `0 4px 15px ${currentTheme.colors.primary}40`
+  };
+
+  return (
+    <div style={backgroundStyle} className="relative">
+      <ParticleSystem type="ambient" intensity={0.5} />
+      <ParticleSystem 
+        trigger={particleTrigger} 
+        type={particleType}
+        intensity={1.5}
+      />
+      
+      <div className="min-h-screen p-5 relative z-10">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <h1 
+              className="text-5xl font-bold mb-4 drop-shadow-lg animate-pulse"
+              style={{ 
+                color: currentTheme.colors.text,
+                textShadow: `0 0 20px ${currentTheme.colors.primary}80`
+              }}
+            >
+              <Sparkles className="inline-block mr-2 animate-spin" />
+              {t('title')}
+              <Sparkles className="inline-block ml-2 animate-spin" />
+            </h1>
+            <div className="flex justify-center gap-4 mb-4">
+              <ThemeSelector />
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex gap-5 mb-5" style={{ height: '70vh' }}>
+            {/* Left Panel - Code Editor */}
+            <div 
+              className="flex-1 rounded-xl flex flex-col transition-all duration-300 hover:scale-[1.02]"
+              style={cardStyle}
+            >
+              <div 
+                className="flex items-center justify-between p-4 rounded-t-xl border-b"
+                style={{ 
+                  background: `linear-gradient(90deg, ${currentTheme.colors.primary}20, ${currentTheme.colors.secondary}20)`,
+                  borderColor: `${currentTheme.colors.primary}30`
+                }}
+              >
+                <span 
+                  className="font-bold text-lg"
+                  style={{ color: currentTheme.colors.text }}
                 >
-                  <Play size={16} className="mr-2" />
-                  {t('runCode')}
-                </Button>
+                  {t('codeEditor')}
+                </span>
+                <div className="flex items-center gap-3">
+                  <Select onValueChange={insertExample}>
+                    <SelectTrigger 
+                      className="w-48 border-none text-white transition-all hover:scale-105"
+                      style={buttonStyle}
+                    >
+                      <SelectValue placeholder={t('examples')} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-black/90 border-white/20">
+                      {Object.entries(examples[currentLanguage]).map(([key, example]) => (
+                        <SelectItem 
+                          key={key} 
+                          value={key}
+                          className="text-white hover:bg-white/10"
+                        >
+                          {example.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <LanguageSwitch onLanguageChange={handleLanguageChange} />
+                  
+                  <Button 
+                    onClick={runCode}
+                    className="text-white font-bold px-4 py-2 rounded-full transition-all hover:scale-110 hover:rotate-3 border-none"
+                    style={buttonStyle}
+                  >
+                    <Play size={16} className="mr-2 animate-pulse" />
+                    {t('runCode')}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 p-4">
+                <CodeEditor 
+                  value={code}
+                  onChange={(value) => {
+                    setCode(value);
+                    playSound('type');
+                  }}
+                  language={currentLanguage}
+                />
               </div>
             </div>
-            <div className="flex-1 p-4">
-              <CodeEditor 
-                value={code}
-                onChange={setCode}
-                language={currentLanguage}
-              />
+
+            {/* Right Panel - Output */}
+            <div 
+              className="flex-1 rounded-xl flex flex-col transition-all duration-300 hover:scale-[1.02]"
+              style={cardStyle}
+            >
+              <div 
+                className="flex items-center justify-between p-4 rounded-t-xl border-b"
+                style={{ 
+                  background: `linear-gradient(90deg, ${currentTheme.colors.secondary}20, ${currentTheme.colors.accent}20)`,
+                  borderColor: `${currentTheme.colors.secondary}30`
+                }}
+              >
+                <span 
+                  className="font-bold text-lg"
+                  style={{ color: currentTheme.colors.text }}
+                >
+                  {t('outputPanel')}
+                </span>
+                <Button
+                  onClick={clearOutput}
+                  size="sm"
+                  className="border-none transition-all hover:scale-110"
+                  style={buttonStyle}
+                >
+                  <Eraser size={16} className="mr-2" />
+                  {t('clearOutput')}
+                </Button>
+              </div>
+              <div className="flex-1 p-4">
+                <OutputPanel outputs={outputs} onClear={clearOutput} />
+              </div>
             </div>
           </div>
 
-          {/* Right Panel - Output */}
-          <div className="flex-1 bg-white rounded-xl panel-shadow border-2 border-pink-200 flex flex-col">
-            <div className="flex items-center justify-between p-4 bg-pink-100 rounded-t-xl border-b-2 border-pink-200">
-              <span className="font-bold text-pink-600 text-lg">
-                {t('outputPanel')}
-              </span>
-              <Button
-                onClick={clearOutput}
-                size="sm"
-                className="bg-pink-500 hover:bg-pink-600"
-              >
-                <Eraser size={16} className="mr-2" />
-                {t('clearOutput')}
-              </Button>
-            </div>
-            <div className="flex-1 p-4">
-              <OutputPanel outputs={outputs} onClear={clearOutput} />
-            </div>
+          {/* Bottom Panel - Translator */}
+          <div style={cardStyle} className="rounded-xl transition-all duration-300">
+            <TranslatorPanel
+              translatedCode={translatedCode}
+              isCollapsed={isTranslatorCollapsed}
+              onToggle={() => {
+                setIsTranslatorCollapsed(!isTranslatorCollapsed);
+                playSound('click');
+              }}
+            />
           </div>
         </div>
-
-        {/* Bottom Panel - Translator */}
-        <TranslatorPanel
-          translatedCode={translatedCode}
-          isCollapsed={isTranslatorCollapsed}
-          onToggle={() => setIsTranslatorCollapsed(!isTranslatorCollapsed)}
-        />
       </div>
     </div>
   );
