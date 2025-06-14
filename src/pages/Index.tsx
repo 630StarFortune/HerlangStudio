@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -34,6 +34,7 @@ const Index = () => {
   const [currentLanguage, setCurrentLanguage] = useState<'zh' | 'en'>('zh');
   const [particleTrigger, setParticleTrigger] = useState(false);
   const [particleType, setParticleType] = useState<'success' | 'error' | 'code'>('success');
+  const dragonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const addOutput = useCallback((type: OutputItem['type'], content: string, art?: string) => {
     setOutputs(prev => [...prev, {
@@ -45,6 +46,11 @@ const Index = () => {
   }, []);
 
   const clearOutput = useCallback(() => {
+    // Clear any pending dragon timeouts
+    if (dragonTimeoutRef.current) {
+      clearTimeout(dragonTimeoutRef.current);
+      dragonTimeoutRef.current = null;
+    }
     setOutputs([]);
     playSound('click');
   }, [playSound]);
@@ -64,15 +70,24 @@ const Index = () => {
       safeRunner(interceptedConsole, {
         summonDragon: (wish: string) => {
           const result = HerlangEngine.builtins.summonDragon(wish);
-          setTimeout(() => {
-            addOutput('dragon', result.message, result.art);
+          
+          // Clear any existing dragon timeout
+          if (dragonTimeoutRef.current) {
+            clearTimeout(dragonTimeoutRef.current);
+          }
+          
+          // Show dragon art immediately
+          addOutput('dragon', '', result.art);
+          playMelody([523, 659, 784, 1047]); // C-E-G-C melody
+          
+          // Show dragon message after delay
+          dragonTimeoutRef.current = setTimeout(() => {
+            addOutput('dragon', result.message);
             playSound('dragon');
             setParticleType('success');
             setParticleTrigger(prev => !prev);
+            dragonTimeoutRef.current = null;
           }, 2000);
-          
-          addOutput('dragon', '', result.art);
-          playMelody([523, 659, 784, 1047]); // C-E-G-C melody
         },
         openBlindBox: () => {
           const result = HerlangEngine.builtins.openBlindBox();
@@ -91,7 +106,6 @@ const Index = () => {
 
   const runCode = useCallback(() => {
     clearOutput();
-    playSound('click');
     
     if (!code.trim()) return;
 
@@ -123,29 +137,81 @@ const Index = () => {
   const insertExample = useCallback((exampleKey: string) => {
     if (!exampleKey) return;
     
+    // Clear output first when switching examples
+    clearOutput();
+    
     const exampleData = examples[currentLanguage][exampleKey as ExampleKey];
     if (exampleData) {
       setCode(exampleData.code);
       playSound('click');
-      setTimeout(() => runCode(), 100);
+      
+      // Run the new code after a short delay to ensure state is updated
+      setTimeout(() => {
+        try {
+          const jsCode = herlangEngine.translateToJS(exampleData.code);
+          setTranslatedCode(jsCode);
+          executeCode(jsCode);
+          playSound('success');
+          setParticleType('success');
+          setParticleTrigger(prev => !prev);
+        } catch (error: any) {
+          let errorMessage = error.message;
+          const match = errorMessage.match(/\((\d+):(\d+)\)/);
+          
+          if (match) {
+            const [, line, char] = match;
+            errorMessage = `🧨 小仙女在第 ${line} 行第 ${char} 个字卡住了！\n她好像不认识这个符号哦，是不是写错了呀？\n\nBabel说: ${error.message}`;
+          } else {
+            errorMessage = `🧨 小仙女炸了！\n${error.message}`;
+          }
+          
+          addOutput('error', errorMessage);
+          playSound('error');
+          setParticleType('error');
+          setParticleTrigger(prev => !prev);
+        }
+      }, 100);
     }
-  }, [currentLanguage, runCode, playSound]);
+  }, [currentLanguage, herlangEngine, executeCode, addOutput, playSound, clearOutput]);
 
   const handleLanguageChange = useCallback((lang: 'zh' | 'en') => {
+    clearOutput();
     setCurrentLanguage(lang);
     herlangEngine.setLanguage(lang);
     playSound('magic');
     
     const defaultExample = examples[lang].dragon;
     setCode(defaultExample.code);
-  }, [herlangEngine, playSound]);
+    
+    // Run the default example after language change
+    setTimeout(() => {
+      try {
+        const jsCode = herlangEngine.translateToJS(defaultExample.code);
+        setTranslatedCode(jsCode);
+        executeCode(jsCode);
+      } catch (error) {
+        console.error('Language change execution error:', error);
+      }
+    }, 100);
+  }, [herlangEngine, playSound, clearOutput, executeCode]);
 
-  // Load default example on mount
+  // Load default example on mount - only once
   React.useEffect(() => {
     const defaultExample = examples[currentLanguage].dragon;
     setCode(defaultExample.code);
-    setTimeout(() => runCode(), 500);
-  }, []);
+    
+    const timeoutId = setTimeout(() => {
+      try {
+        const jsCode = herlangEngine.translateToJS(defaultExample.code);
+        setTranslatedCode(jsCode);
+        executeCode(jsCode);
+      } catch (error) {
+        console.error('Initial load execution error:', error);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, []); // Empty dependency array to run only once
 
   const backgroundStyle = {
     background: currentTheme.gradients.main,
