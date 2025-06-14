@@ -126,7 +126,7 @@ const Index = () => {
       if (programmingStyle === 'herlang') {
         jsCode = herlangEngine.translateToJS(code);
       } else {
-        jsCode = multiEngine.translateToJS(code, programmingStyle);
+        jsCode = multiEngine.translateToJS(code);
       }
       
       setTranslatedCode(jsCode);
@@ -175,7 +175,7 @@ const Index = () => {
           if (programmingStyle === 'herlang') {
             jsCode = herlangEngine.translateToJS(exampleData.code);
           } else {
-            jsCode = multiEngine.translateToJS(exampleData.code, programmingStyle);
+            jsCode = multiEngine.translateToJS(exampleData.code);
           }
           
           setTranslatedCode(jsCode);
@@ -249,7 +249,7 @@ const Index = () => {
           if (style === 'herlang') {
             jsCode = herlangEngine.translateToJS(defaultExample.code);
           } else {
-            jsCode = multiEngine.translateToJS(defaultExample.code, style);
+            jsCode = multiEngine.translateToJS(defaultExample.code);
           }
           
           setTranslatedCode(jsCode);

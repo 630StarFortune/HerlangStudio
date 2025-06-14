@@ -1,3 +1,4 @@
+
 // Multi-language Herlang engine supporting different programming styles
 export type ProgrammingStyle = 'herlang' | 'chinese' | 'english' | 'python' | 'rust';
 
@@ -68,6 +69,9 @@ export class MultiLanguageHerlangEngine {
   constructor(style: ProgrammingStyle = 'chinese') {
     this.currentStyle = style;
     this.dictionaries = {
+      herlang: {
+        // For herlang style, we use an empty dictionary since it uses the original HerlangEngine
+      },
       chinese: {
         '小仙女': 'let',
         '设定一个': 'let', 
@@ -185,18 +189,31 @@ export class MultiLanguageHerlangEngine {
     return processedCode;
   }
 
-  translateToJS(herlangCode: string): string {
-    const preprocessedCode = this.preprocessor(herlangCode);
+  translateToJS(herlangCode: string, style?: ProgrammingStyle): string {
+    const targetStyle = style || this.currentStyle;
     
-    // For Python and Rust styles, we need additional processing
-    if (this.currentStyle === 'python') {
-      return this.processPythonStyle(preprocessedCode);
-    } else if (this.currentStyle === 'rust') {
-      return this.processRustStyle(preprocessedCode);
+    // If it's herlang style, we should use the original HerlangEngine instead
+    if (targetStyle === 'herlang') {
+      throw new Error('Use HerlangEngine for herlang style translation');
     }
     
-    // For Chinese and English styles, use the original Babel transformation
+    // Set the style temporarily if provided
+    const originalStyle = this.currentStyle;
+    if (style) {
+      this.setStyle(style);
+    }
+    
     try {
+      const preprocessedCode = this.preprocessor(herlangCode);
+      
+      // For Python and Rust styles, we need additional processing
+      if (this.currentStyle === 'python') {
+        return this.processPythonStyle(preprocessedCode);
+      } else if (this.currentStyle === 'rust') {
+        return this.processRustStyle(preprocessedCode);
+      }
+      
+      // For Chinese and English styles, use the original Babel transformation
       const { transform } = require('@babel/standalone');
       const result = transform(preprocessedCode, { 
         presets: [],
@@ -205,6 +222,11 @@ export class MultiLanguageHerlangEngine {
       return result.code || '';
     } catch (error) {
       throw error;
+    } finally {
+      // Restore original style
+      if (style) {
+        this.setStyle(originalStyle);
+      }
     }
   }
 
@@ -279,6 +301,7 @@ export class MultiLanguageHerlangEngine {
 
   getStyleDisplayName(style: ProgrammingStyle): string {
     const names = {
+      herlang: 'Herlang原味',
       chinese: '中式浪漫',
       english: 'English Style',
       python: 'Python风格',
